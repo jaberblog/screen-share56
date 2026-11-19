@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">اشتراک صفحه</string>
+    <string name="accessibility_desc">این سرویس فقط برای کنترل گوشی از راه دور (لمس، اسکرول، دکمه‌های برگشت و خانه و تایپ) از طریق مرورگر کامپیوتر استفاده می‌شود.</string>
+</resources>

@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>اشتراک صفحه گوشی</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --line:#262a33; --txt:#e8eaf0; --mut:#8b93a4;
+  --acc:#4f8cff; --ok:#27c281; --bad:#ff5d5d; --warn:#f5b84b;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);
+  font-family:Vazirmatn,Tahoma,system-ui,sans-serif;font-size:14px}
+body{display:flex;flex-direction:column;overflow:hidden}
+
+#bar{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);
+  border-bottom:1px solid var(--line);flex-wrap:wrap}
+#bar .grp{display:flex;gap:6px;align-items:center}
+#bar .sp{flex:1}
+button,select{font:inherit;color:var(--txt);background:#222733;border:1px solid var(--line);
+  border-radius:8px;padding:6px 11px;cursor:pointer}
+button:hover,select:hover{background:#2b3140}
+button:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#st{color:var(--mut);direction:ltr;unicode-bidi:plaintext;white-space:nowrap}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block}
+#dot.ok{background:var(--ok)}
+
+#warn{display:none;background:#3a2f12;color:var(--warn);padding:7px 12px;font-size:13px;
+  border-bottom:1px solid var(--line)}
+#warn.on{display:block}
+
+#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  padding:8px;position:relative}
+canvas{display:block;max-width:100%;max-height:100%;background:#000;border-radius:6px;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  cursor:crosshair;box-shadow:0 0 0 1px var(--line)}
+#kb{position:fixed;opacity:0;width:1px;height:1px;left:0;top:0;border:0;padding:0;resize:none}
+
+#fatal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  background:var(--bg);padding:24px;text-align:center;line-height:2}
+#fatal.on{display:flex}
+#fatal div{max-width:480px}
+#hint{color:var(--mut);text-align:center;padding:0 12px 8px;font-size:12px}
+
+#wait{display:none;position:fixed;left:0;right:0;top:50%;transform:translateY(-50%);
+  text-align:center;color:var(--mut);pointer-events:none;z-index:5;font-size:15px}
+
+/* حالت «فقط تصویر» (آیفون): بدون دکمه و متن، تصویر تمام‌صفحه */
+body.kiosk{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;background:#000;
+  overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+body.kiosk #bar, body.kiosk #warn, body.kiosk #hint{display:none !important}
+body.kiosk #stage{position:fixed;inset:0;padding:0}
+body.kiosk canvas{max-width:none;max-height:none;border-radius:0;box-shadow:none;cursor:default}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div class="grp">
+    <span id="dot"></span><span id="st">در حال اتصال…</span>
+  </div>
+  <div class="sp"></div>
+  <div class="grp">
+    <button data-a="back"    title="برگشت (کلیک راست)">◁ برگشت</button>
+    <button data-a="home"    title="خانه">○ خانه</button>
+    <button data-a="recents" title="برنامه‌های اخیر">□ اخیر</button>
+    <button data-a="notif"   title="اعلان‌ها">اعلان‌ها</button>
+    <button data-a="quick"   title="تنظیمات سریع">تنظیمات سریع</button>
+    <button data-a="wake"    title="روشن کردن صفحه">روشن کردن صفحه</button>
+  </div>
+  <div class="grp">
+    <label for="q" style="color:var(--mut)">کیفیت</label>
+    <select id="q">
+      <option value="0">سریع</option>
+      <option value="1">بالا</option>
+      <option value="2" selected>خیلی بالا</option>
+    </select>
+    <button id="fs" title="تمام‌صفحه">تمام‌صفحه</button>
+  </div>
+</div>
+
+<div id="warn">کنترل از راه دور فعال نیست؛ روی گوشی سرویس «اشتراک صفحه» را در تنظیمات دسترسی‌پذیری روشن کنید. فعلاً فقط تصویر نمایش داده می‌شود.</div>
+
+<div id="stage">
+  <canvas id="screen" width="360" height="800"></canvas>
+  <textarea id="kb" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="ورودی کیبورد"></textarea>
+  <div id="fatal"><div id="fatalMsg"></div></div>
+</div>
+<div id="hint">کلیک = لمس · درگیر کردن و رها کردن = کشیدن · چرخ ماوس = اسکرول · کلیک راست = برگشت · بعد از کلیک روی صفحه می‌توانید با کیبورد تایپ کنید</div>
+<div id="wait"></div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = id => document.getElementById(id);
+const cv = $('screen');
+const ctx = cv.getContext('2d', { alpha: false });
+const st = $('st'), dot = $('dot'), warn = $('warn'), kb = $('kb'), qsel = $('q'), wait = $('wait');
+
+/* آیفون/آیپد = حالت «فقط تصویر». با ?clean همه‌جا، با ?ui نوار ابزار همه‌جا. */
+const ua = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const params = new URLSearchParams(location.search);
+const kiosk = params.has('ui') ? false : (isIOS || params.has('clean'));
+if (kiosk) document.body.classList.add('kiosk');
+
+if (typeof VideoDecoder === 'undefined') {
+  $('fatalMsg').textContent =
+    'این مرورگر WebCodecs را پشتیبانی نمی‌کند یا صفحه با https باز نشده است. ' +
+    'در آیفون به iOS نسخهٔ ۱۶٫۴ یا بالاتر نیاز است؛ در کامپیوتر از Chrome یا Edge جدید استفاده کنید.';
+  $('fatal').classList.add('on');
+  return;
+}
+
+let ws = null, dec = null, initBusy = false;
+let cfgOk = false, needKey = true, lastCfg = null;
+let ts = 0, latest = null, raf = 0;
+let frames = 0, bytes = 0, info = '';
+let gotFrame = false;
+let sw = 0, sh = 0;
+
+function showWait(t) {
+  if (!kiosk) return;
+  wait.textContent = t;
+  wait.style.display = 'block';
+}
+
+function setStatus(text, ok) {
+  st.textContent = text;
+  dot.className = ok ? 'ok' : '';
+  if (!gotFrame) showWait(text);
+}
+
+function send(o) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
+}
+
+/* ---------------------------------------------------------------- layout */
+
+/* آیفون: تصویر دقیقاً اندازهٔ صفحهٔ آیفون می‌شود. اگر نسبت‌ها خیلی فرق داشتند
+   (مثلاً گوشی عمودی و آیفون افقی) بدون کشیدگی وسط صفحه می‌نشیند. */
+function layout() {
+  if (!kiosk || !sw || !sh) return;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const r = sw / sh, v = vw / vh;
+  let w, h;
+  if (Math.abs(r / v - 1) < 0.2) { w = vw; h = vh; }
+  else if (r > v) { w = vw; h = vw / r; }
+  else { h = vh; w = vh * r; }
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+
+/* ---------------------------------------------------------------- connection */
+
+function connect() {
+  setStatus('در حال اتصال…', false);
+  ws = new WebSocket('wss://' + location.host + '/ws');
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => setStatus('متصل', true);
+  ws.onmessage = onMsg;
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  ws.onclose = () => {
+    cfgOk = false;
+    gotFrame = false;
+    closeDec();
+    setStatus('قطع شد — تلاش دوباره…', false);
+    setTimeout(connect, 1000);
+  };
+}
+
+setInterval(() => send({ t: 'p' }), 3000);   // ضربان: اتصال زنده بماند + وضعیت کنترل
+
+setInterval(() => {
+  if (ws && ws.readyState === 1 && cfgOk) {
+    st.textContent = info + ' · ' + frames + ' fps · ' + (bytes * 8 / 1e6).toFixed(1) + ' Mbps';
+  }
+  frames = 0; bytes = 0;
+}, 1000);
+
+/* ---------------------------------------------------------------- H.264: Annex B → AVCC
+   (Safari و Chrome هر دو با AVCC + description مطمئن کار می‌کنند) */
+
+function splitNals(u8) {
+  const out = [];
+  const n = u8.length;
+  let i = 0, start = -1;
+  while (i + 2 < n) {
+    if (u8[i] === 0 && u8[i + 1] === 0 && u8[i + 2] === 1) {
+      if (start >= 0) {
+        let end = i;
+        if (end > start && u8[end - 1] === 0) end--;
+        out.push(u8.subarray(start, end));
+      }
+      start = i + 3;
+      i += 3;
+    } else {
+      i++;
+    }
+  }
+  if (start >= 0 && start < n) out.push(u8.subarray(start, n));
+  return out;
+}
+
+function buildAvcC(sps, pps) {
+  const d = new Uint8Array(11 + sps.length + pps.length);
+  d[0] = 1; d[1] = sps[1]; d[2] = sps[2]; d[3] = sps[3];
+  d[4] = 0xFF; d[5] = 0xE1;
+  d[6] = sps.length >> 8; d[7] = sps.length & 255;
+  d.set(sps, 8);
+  const o = 8 + sps.length;
+  d[o] = 1; d[o + 1] = pps.length >> 8; d[o + 2] = pps.length & 255;
+  d.set(pps, o + 3);
+  return d;
+}
+
+function toAvcc(nals) {
+  const keep = [];
+  let total = 0;
+  for (const nal of nals) {
+    const t = nal[0] & 31;
+    if (t === 7 || t === 8 || t === 9) continue;
+    keep.push(nal);
+    total += 4 + nal.length;
+  }
+  if (!total) return null;
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const nal of keep) {
+    const L = nal.length;
+    out[o] = (L >>> 24) & 255; out[o + 1] = (L >>> 16) & 255;
+    out[o + 2] = (L >>> 8) & 255; out[o + 3] = L & 255;
+    out.set(nal, o + 4);
+    o += 4 + L;
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------- messages */
+
+function onMsg(ev) {
+  if (typeof ev.data === 'string') {
+    let m;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.t === 'cfg') configure(m);
+    else if (m.t === 's') warn.classList.toggle('on', !m.ctl);
+    return;
+  }
+  if (!cfgOk) return;
+
+  const v = new Uint8Array(ev.data);
+  const key = v[0] === 1;
+  if (needKey && !key) return;
+
+  const nals = splitNals(v.subarray(1));
+
+  if (key && !dec) {
+    if (initBusy) return;
+    const sps = nals.find(x => (x[0] & 31) === 7);
+    const pps = nals.find(x => (x[0] & 31) === 8);
+    if (!sps || !pps) return;
+    initDecoder(lastCfg, buildAvcC(sps, pps));
+    return;
+  }
+  if (!dec || dec.state !== 'configured') return;
+
+  // اگر دیکودر عقب افتاد، به‌جای انباشتن تأخیر، منتظر کی‌فریم تازه می‌مانیم
+  if (dec.decodeQueueSize > 8 && !key) {
+    needKey = true;
+    send({ t: 'k' });
+    return;
+  }
+
+  const data = toAvcc(nals);
+  if (!data) return;
+  needKey = false;
+  bytes += v.length;
+  try {
+    ts += 16667;
+    dec.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: ts, data }));
+  } catch (e) {
+    resetDecoder();
+  }
+}
+
+/* ---------------------------------------------------------------- decoder */
+
+function closeDec() {
+  try { if (dec && dec.state !== 'closed') dec.close(); } catch (e) {}
+  dec = null;
+  if (latest) { try { latest.close(); } catch (e) {} latest = null; }
+}
+
+function configure(m) {
+  lastCfg = m;
+  cfgOk = true;
+  needKey = true;
+  closeDec();
+  if (m.q !== undefined) qsel.value = String(m.q);
+  info = m.w + '×' + m.h;
+  sw = m.w; sh = m.h;
+  layout();
+  send({ t: 'k' });
+}
+
+async function initDecoder(m, description) {
+  initBusy = true;
+  const cfg = { codec: m.codec, description, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
+  let sup = null;
+  try { sup = await VideoDecoder.isConfigSupported(cfg); } catch (e) {}
+  if (!sup || !sup.supported) cfg.hardwareAcceleration = 'no-preference';
+  if (lastCfg !== m) { initBusy = false; return; }   // در این فاصله پیکربندی عوض شد
+  const d = new VideoDecoder({ output: onFrame, error: () => resetDecoder() });
+  try {
+    d.configure(cfg);
+  } catch (e) {
+    setStatus('این کدک پشتیبانی نمی‌شود: ' + m.codec, false);
+    initBusy = false;
+    return;
+  }
+  dec = d;
+  initBusy = false;
+  needKey = true;
+  send({ t: 'k' });
+}
+
+function resetDecoder() {
+  closeDec();
+  needKey = true;
+  send({ t: 'k' });
+}
+
+function onFrame(f) {
+  if (latest) latest.close();
+  latest = f;
+  if (!raf) raf = requestAnimationFrame(draw);
+}
+
+function draw() {
+  raf = 0;
+  if (!latest) return;
+  const f = latest; latest = null;
+  if (cv.width !== f.displayWidth || cv.height !== f.displayHeight) {
+    cv.width = f.displayWidth;
+    cv.height = f.displayHeight;
+    sw = f.displayWidth; sh = f.displayHeight;
+    layout();
+  }
+  ctx.drawImage(f, 0, 0);
+  f.close();
+  frames++;
+  if (!gotFrame) {
+    gotFrame = true;
+    wait.style.display = 'none';
+  }
+}
+
+/* ---------------------------------------------------------------- input */
+
+function norm(e) {
+  const r = cv.getBoundingClientRect();
+  return [
+    Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+    Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))
+  ];
+}
+const r4 = n => Math.round(n * 10000) / 10000;
+
+let g = null;
+
+cv.addEventListener('pointerdown', e => {
+  if (!e.isPrimary) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  cv.setPointerCapture(e.pointerId);
+  g = { t0: performance.now(), tl: 0, pts: [norm(e)] };
+  if (e.pointerType !== 'touch') kb.focus({ preventScroll: true });   // روی لمسی کیبورد باز نشود
+  e.preventDefault();
+});
+
+cv.addEventListener('pointermove', e => {
+  if (!g || !e.isPrimary) return;
+  const now = performance.now();
+  if (now - g.tl < 12) return;
+  g.tl = now;
+  g.pts.push(norm(e));
+});
+
+function endGesture(e) {
+  if (!g || !e.isPrimary) return;
+  g.pts.push(norm(e));
+  const d = Math.max(1, Math.round(performance.now() - g.t0));
+  let pts = g.pts;
+  if (pts.length > 24) {
+    const step = (pts.length - 1) / 23, s = [];
+    for (let i = 0; i < 24; i++) s.push(pts[Math.round(i * step)]);
+    pts = s;
+  }
+  send({ t: 'g', p: pts.map(p => [r4(p[0]), r4(p[1])]), d });
+  g = null;
+}
+cv.addEventListener('pointerup', endGesture);
+cv.addEventListener('pointercancel', () => { g = null; });
+
+cv.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  send({ t: 'a', a: 'back' });
+});
+
+let wAcc = 0, wTimer = 0, wPos = [0.5, 0.5];
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  wAcc += e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+  wPos = norm(e);
+  if (!wTimer) wTimer = setTimeout(flushWheel, 90);
+}, { passive: false });
+
+function flushWheel() {
+  wTimer = 0;
+  const r = cv.getBoundingClientRect();
+  let d = wAcc / r.height;
+  wAcc = 0;
+  if (Math.abs(d) < 0.01) return;
+  d = Math.max(-0.5, Math.min(0.5, d));
+  const cy = Math.min(0.8, Math.max(0.2, wPos[1]));
+  const clamp = v => Math.min(0.98, Math.max(0.02, v));
+  // چرخ به پایین = انگشت به بالا
+  send({ t: 'g', p: [[r4(wPos[0]), r4(clamp(cy + d / 2))], [r4(wPos[0]), r4(clamp(cy - d / 2))]], d: 180 });
+}
+
+/* iOS: جلوی زوم دو انگشتی و کشیده‌شدن صفحه */
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchmove', e => { if (kiosk) e.preventDefault(); }, { passive: false });
+
+/* کیبورد: متن از textarea مخفی می‌آید (فارسی و paste هم کار می‌کند) */
+let composing = false;
+kb.addEventListener('compositionstart', () => { composing = true; });
+kb.addEventListener('compositionend', () => {
+  composing = false;
+  const s = kb.value; kb.value = '';
+  if (s) send({ t: 'text', s });
+});
+kb.addEventListener('input', () => {
+  if (composing) return;
+  const s = kb.value; kb.value = '';
+  if (s) send({ t: 'text', s });
+});
+kb.addEventListener('keydown', e => {
+  if (composing) return;
+  if (e.key === 'Backspace') { e.preventDefault(); send({ t: 'bs' }); }
+  else if (e.key === 'Enter') { e.preventDefault(); send({ t: 'enter' }); }
+  else if (e.key === 'Escape') { e.preventDefault(); send({ t: 'a', a: 'back' }); }
+});
+
+document.querySelectorAll('button[data-a]').forEach(b =>
+  b.addEventListener('click', () => send({ t: 'a', a: b.dataset.a })));
+
+qsel.addEventListener('change', () => send({ t: 'q', v: parseInt(qsel.value, 10) }));
+
+$('fs').addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+});
+
+connect();
+})();
+</script>
+</body>
+</html>
